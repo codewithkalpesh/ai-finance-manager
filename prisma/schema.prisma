@@ -1,0 +1,299 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  password      String
+  name          String
+  avatar        String?
+  bio           String?
+  
+  // Financial data
+  totalBalance  Float      @default(0)
+  currency      String     @default("INR")
+  monthlyIncome Float      @default(0)
+  
+  // Relations
+  expenses      Expense[]
+  incomes       Income[]
+  goals         Goal[]
+  investments   Investment[]
+  budgets       Budget[]
+  expenseShares ExpenseShare[]
+  chatMessages  ChatMessage[]
+  anomalyAlerts AnomalyAlert[]
+  notifications Notification[]
+  recurringEntries RecurringEntry[]
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+// Expense Model
+model Expense {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount        Float
+  category      String     // e.g., "food", "transport", "entertainment"
+  description   String?
+  date          DateTime
+  
+  // Receipt related
+  receiptImage  String?    // URL to uploaded receipt image
+  extractedData Json?      // OCR extracted data
+  
+  // Sharing
+  isShared      Boolean    @default(false)
+  expenseShares ExpenseShare[]
+  
+  // Anomaly detection
+  isAnomaly     Boolean    @default(false)
+  anomalyAlerts AnomalyAlert[]
+  
+  // Recurring
+  isRecurring   Boolean    @default(false)
+  recurringEntries RecurringEntry[]
+  
+  tags          String[]
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([date])
+}
+
+// Income Model
+model Income {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  source        String     // e.g., "salary", "freelance", "investment", "business"
+  description   String?
+  date          DateTime
+
+  // Recurring
+  isRecurring   Boolean    @default(false)
+  recurringEntries RecurringEntry[]
+
+  tags          String[]
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([date])
+}
+
+// Recurring Entry Model
+model RecurringEntry {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Can be either expense or income
+  expenseId     String?
+  expense       Expense?   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  incomeId      String?
+  income        Income?    @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+
+  frequency     String     // "daily", "weekly", "monthly", "yearly"
+  nextDue       DateTime
+  isActive      Boolean    @default(true)
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([nextDue])
+  @@index([isActive])
+}
+
+// Category Model
+model Category {
+  id            String     @id @default(cuid())
+  name          String     @unique
+  icon          String?
+  color         String?
+  description   String?
+  
+  createdAt     DateTime   @default(now())
+}
+
+// Goal Model
+model Goal {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String?
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  deadline      DateTime
+  
+  priority      String    @default("medium") // low, medium, high
+  status        String    @default("active") // active, completed, paused
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([userId])
+}
+
+// Investment Model
+model Investment {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name          String
+  type          String     // e.g., "equity", "debt", "mutual-fund", "sip"
+  amount        Float
+  expectedReturn Float?
+  riskLevel     String     // low, medium, high
+  
+  recommended   Boolean    @default(false)
+  recommendationReason String?
+  
+  startDate     DateTime   @default(now())
+  maturityDate  DateTime?
+  
+  status        String    @default("active") // active, matured, cancelled
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([userId])
+}
+
+// Budget Model
+model Budget {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  category    String
+  amount      Float
+  spent       Float    @default(0)
+  period      String   // monthly, weekly, yearly
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@map("budgets")
+}
+
+// Expense Share Model (for split bills)
+model ExpenseShare {
+  id            String     @id @default(cuid())
+  expenseId     String
+  expense       Expense    @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  status        String     @default("pending") // pending, paid, cancelled
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([expenseId, userId]) // One user can only have one share per expense
+  @@index([expenseId])
+  @@index([userId])
+}
+
+// Chat Message Model
+model ChatMessage {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  role          String     // "user" or "assistant"
+  content       String
+  metadata      Json?      // Additional context like financial data used
+  
+  createdAt     DateTime   @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Anomaly Alert Model (Fraud Detection)
+model AnomalyAlert {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  expenseId     String
+  expense       Expense    @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  
+  alertType     String     // "unusual_amount", "unusual_category", "unusual_time", etc.
+  severity      String     // low, medium, high
+  message       String
+  
+  isResolved    Boolean    @default(false)
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([isResolved])
+}
+
+// Notification Model
+model Notification {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title         String
+  message       String
+  type          String     // "alert", "goal_milestone", "investment_update", "expense_anomaly", "recurring_reminder"
+  
+  read          Boolean    @default(false)
+  link          String?    // Link to relevant page
+  
+  // For recurring reminders
+  recurringEntryId String?
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([read])
+}
+
+// Multi-Currency Support Model
+model CurrencyRate {
+  id            String     @id @default(cuid())
+  fromCurrency  String
+  toCurrency    String
+  rate          Float
+  
+  lastUpdated   DateTime   @updatedAt
+  
+  @@unique([fromCurrency, toCurrency])
+  @@index([lastUpdated])
+}
